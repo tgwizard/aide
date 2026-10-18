@@ -20,11 +20,11 @@ export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 ## Build & install
 
 ```sh
-./gradlew assembleDebug
-adb devices                                  # find serials for phone and watch
-adb -s <phone> install -r phone/build/outputs/apk/debug/phone-debug.apk
-adb -s <watch> install -r wear/build/outputs/apk/debug/wear-debug.apk
+./deploy.sh        # release build (R8, debug-signed) → installs on the connected phone + watch
 ```
+
+Use release builds on the watch: debug Compose builds scroll at ~8 fps on it.
+Manual install: `adb -s <serial> install -r {phone,wear}/build/outputs/apk/release/*-release.apk`.
 
 Pairing over Wi-Fi: on the device, Developer options → Wireless debugging → *Pair device with pairing code*,
 then `adb pair <ip>:<pairing-port>` and `adb connect <ip>:<debug-port>`.

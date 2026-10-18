@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Advertised to the watch so it can find the node running the phone app. -->
-<resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@array/android_wear_capabilities">
+<!-- Advertised to the watch so it can find the node running the phone app (kept via res/raw/keep.xml). -->
+<resources>
     <string-array name="android_wear_capabilities">
         <item>aide_phone</item>
     </string-array>

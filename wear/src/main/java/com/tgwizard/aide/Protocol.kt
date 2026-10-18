@@ -4,6 +4,8 @@ package com.tgwizard.aide
 object Protocol {
     const val PHONE_CAPABILITY = "aide_phone"
     const val PATH_LOCK = "/aide/lock"
+    const val PATH_STATUS = "/aide/status"
+    const val PATH_SCREEN = "/aide/screen"
 
     const val RESULT_OK = "ok"
     const val RESULT_NO_ACCESSIBILITY = "no_accessibility"
