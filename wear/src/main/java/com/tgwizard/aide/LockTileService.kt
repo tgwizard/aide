@@ -11,7 +11,7 @@ import androidx.wear.tiles.TileService
 import com.google.common.util.concurrent.ListenableFuture
 
 /**
- * One-tap "lock phone" tile, with a STATUS edge button that opens the app.
+ * One-tap "lock phone" tile, with an AIDE edge button that opens the app.
  *
  * Tapping the ring fires a LoadAction, which makes the system re-request the tile with
  * [CLICK_LOCK] as the last clicked id; we lock the phone then, render the result, and ask for a
@@ -34,7 +34,7 @@ class LockTileService : TileService() {
             val layout = TileUi.screen(
                 top = TileUi.caps(status.orEmpty(), Palette.BONE),
                 ring = TileUi.ring(requestParams.scope, CLICK_LOCK, TileUi.reload(), R.drawable.ic_lock, Palette.BRONZE, "Lock phone"),
-                bottom = TileUi.pill(CLICK_STATUS, TileUi.openApp(packageName), "Status", "Open status"),
+                bottom = TileUi.pill(CLICK_OPEN, TileUi.openApp(packageName), "Aide", "Open Aide"),
             )
             TileBuilders.Tile.Builder()
                 .setTileTimeline(TimelineBuilders.Timeline.fromLayoutElement(layout))
@@ -51,7 +51,7 @@ class LockTileService : TileService() {
     companion object {
         private const val TAG = "AideLockTile"
         private const val CLICK_LOCK = "lock"
-        private const val CLICK_STATUS = "status"
+        private const val CLICK_OPEN = "open"
         private const val REVERT_DELAY_MS = 4_000L
 
         /** Set before the post-lock refresh so that request renders idle instead of locking again. */

@@ -26,6 +26,17 @@ export PATH="$HOME/Library/Android/sdk/platform-tools:$PATH"
 Use release builds on the watch: debug Compose builds scroll at ~8 fps on it.
 Manual install: `adb -s <serial> install -r {phone,wear}/build/outputs/apk/release/*-release.apk`.
 
+### Signing
+
+Release builds are signed with a dedicated key, kept out of the repo:
+
+- Keystore: `~/.android/aide-release.p12` (PKCS12, alias `aide`).
+- Password: macOS Keychain, service `aide-release-keystore` (`security find-generic-password -s aide-release-keystore -w`).
+- Backup: both in 1Password. Losing the key means uninstalling/reinstalling Aide (and redoing setup) to update it.
+
+`deploy.sh` exports `AIDE_KEYSTORE` / `AIDE_KEYSTORE_PASSWORD` for Gradle; without them builds fall back to the debug key.
+Phone and watch apps must be signed with the same key or the Wearable Data Layer won't connect them.
+
 Pairing over Wi-Fi: on the device, Developer options → Wireless debugging → *Pair device with pairing code*,
 then `adb pair <ip>:<pairing-port>` and `adb connect <ip>:<debug-port>`.
 

@@ -14,13 +14,26 @@ android {
         versionCode = 1
         versionName = "0.1"
     }
+    // Release key comes from the environment (see deploy.sh); without it, fall back to the debug
+    // key so the public repo still builds. Phone and watch must be signed with the same key.
+    val releaseKeystore = System.getenv("AIDE_KEYSTORE")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storeType = "pkcs12"
+                storePassword = System.getenv("AIDE_KEYSTORE_PASSWORD")
+                keyAlias = "aide"
+                keyPassword = System.getenv("AIDE_KEYSTORE_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Personal sideloaded app: reuse the debug key so phone and watch builds always match.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
     compileOptions {
