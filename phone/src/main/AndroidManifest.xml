@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Both granted via adb (see README): toggle our accessibility service on demand, and read
+         the foreground app without one. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- To resolve labels for the foreground app reported to the watch. -->
     <queries>
@@ -31,7 +40,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Gives us performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN). -->
+        <!-- Lock screen + screenshots; switched on only on demand (AccessibilityToggle). -->
         <service
             android:name=".AideAccessibilityService"
             android:exported="false"

@@ -1,31 +1,27 @@
 package com.tgwizard.aide
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.ByteArrayOutputStream
+import kotlin.coroutines.resume
 
 /**
- * Must be enabled by the user under Settings > Accessibility (or via adb, see README).
- * While enabled, the system keeps it bound, so [instance] is available to the rest of the app.
+ * Locks the screen and takes screenshots (without a MediaProjection consent prompt).
  *
- * Besides locking, it tracks the foreground app (from window-state events) and can take
- * screenshots without a MediaProjection consent prompt.
+ * Normally switched on and off on demand by [AccessibilityToggle]; reach it through
+ * [AccessibilityToggle.withService] rather than [instance] directly.
  */
 class AideAccessibilityService : AccessibilityService() {
 
-    data class ForegroundApp(val packageName: String, val label: String, val since: Long)
-
-    private val homePackage by lazy {
-        packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
-            ?.activityInfo?.packageName
-    }
-
     override fun onServiceConnected() {
         instance = this
+        AccessibilityToggle.onServiceConnected(this)
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -33,28 +29,12 @@ class AideAccessibilityService : AccessibilityService() {
         return super.onUnbind(intent)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = event.packageName?.toString() ?: return
-        if (pkg == foreground?.packageName || !isUserFacingApp(pkg)) return
-        foreground = ForegroundApp(pkg, labelFor(pkg), System.currentTimeMillis())
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
     override fun onInterrupt() {}
 
-    /** Skips system UI, keyboards and other overlays that also emit window-state events. */
-    private fun isUserFacingApp(pkg: String): Boolean =
-        pkg == homePackage || packageManager.getLaunchIntentForPackage(pkg) != null
-
-    private fun labelFor(pkg: String): String {
-        if (pkg == homePackage) return "Home"
-        return runCatching {
-            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
-        }.getOrDefault(pkg)
-    }
-
     /** Captures the screen as a small JPEG, or null if not possible (e.g. a FLAG_SECURE window). */
-    fun captureScreen(onResult: (ByteArray?) -> Unit) {
+    suspend fun captureScreen(): ByteArray? = suspendCancellableCoroutine { continuation ->
         takeScreenshot(
             Display.DEFAULT_DISPLAY,
             mainExecutor,
@@ -63,12 +43,12 @@ class AideAccessibilityService : AccessibilityService() {
                     val bytes = result.hardwareBuffer.use { buffer ->
                         Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)?.let(::encodeThumbnail)
                     }
-                    onResult(bytes)
+                    continuation.resume(bytes)
                 }
 
                 override fun onFailure(errorCode: Int) {
                     Log.w(TAG, "Screenshot failed: $errorCode")
-                    onResult(null)
+                    continuation.resume(null)
                 }
             },
         )
@@ -89,22 +69,20 @@ class AideAccessibilityService : AccessibilityService() {
         private const val TAG = "AideAccessibility"
         private const val THUMBNAIL_WIDTH = 288
         private const val THUMBNAIL_QUALITY = 60
+        private const val LOCK_IDLE_MS = 2_000L
+        private const val SCREENSHOT_IDLE_MS = 15_000L
 
         @Volatile
         var instance: AideAccessibilityService? = null
             private set
 
-        @Volatile
-        var foreground: ForegroundApp? = null
-            private set
+        suspend fun lockScreen(context: Context): String =
+            AccessibilityToggle.withService(context, LOCK_IDLE_MS) { service ->
+                if (service.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)) Protocol.RESULT_OK else Protocol.RESULT_FAILED
+            } ?: Protocol.RESULT_NO_ACCESSIBILITY
 
-        fun lockScreen(): String {
-            val service = instance ?: return Protocol.RESULT_NO_ACCESSIBILITY
-            return if (service.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)) {
-                Protocol.RESULT_OK
-            } else {
-                Protocol.RESULT_FAILED
-            }
-        }
+        /** Kept on while the watch keeps asking, so a live thumbnail doesn't re-enable it every time. */
+        suspend fun screenshot(context: Context): ByteArray? =
+            AccessibilityToggle.withService(context, SCREENSHOT_IDLE_MS) { it.captureScreen() }
     }
 }

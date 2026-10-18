@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.Date
 
@@ -64,8 +66,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SetupScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var onDemand by remember { mutableStateOf(false) }
     var accessibilityEnabled by remember { mutableStateOf(false) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        onDemand = AccessibilityToggle.canToggle(context)
         accessibilityEnabled = AideAccessibilityService.instance != null
     }
 
@@ -88,18 +93,21 @@ private fun SetupScreen() {
             )
         }
         Text(
-            if (accessibilityEnabled) "Accessibility service enabled. Your watch can lock this phone."
-            else "Enable the Aide accessibility service so your watch can lock this phone.",
+            when {
+                onDemand -> "Accessibility on demand: Aide switches its service on only while the watch locks the phone or shows its screen, so apps like BankID keep working."
+                accessibilityEnabled -> "Accessibility service enabled. Your watch can lock this phone."
+                else -> "Enable the Aide accessibility service so your watch can lock this phone."
+            },
             style = MaterialTheme.typography.bodyLarge,
         )
-        if (!accessibilityEnabled) {
+        if (!onDemand && !accessibilityEnabled) {
             Button(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
                 Text("Open accessibility settings")
             }
         }
         OutlinedButton(
-            onClick = { AideAccessibilityService.lockScreen() },
-            enabled = accessibilityEnabled,
+            onClick = { scope.launch { AideAccessibilityService.lockScreen(context) } },
+            enabled = onDemand || accessibilityEnabled,
             border = BorderStroke(1.dp, Bronze),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Bronze),
         ) {

@@ -42,17 +42,22 @@ then `adb pair <ip>:<pairing-port>` and `adb connect <ip>:<debug-port>`.
 
 ## Phone setup
 
-Enable the accessibility service (Settings → Accessibility → Aide), or via adb, appending to whatever is already enabled
-(e.g. 1Password). A malformed value makes Android clear the whole list, so check the result:
+Aide's accessibility service (lock screen, screenshots) is switched on only while the watch uses
+it, because apps like BankID refuse to run while an unknown accessibility service is enabled.
+That, and reading the foreground app without accessibility, need two one-time grants:
 
 ```sh
-cur=$(adb -s <phone> shell settings get secure enabled_accessibility_services | tr -d '\r')
-svc=com.tgwizard.aide/com.tgwizard.aide.AideAccessibilityService
-# Braces matter in zsh: "$cur:c..." is parsed as a history modifier and eats the ":c".
-[ "$cur" = null ] && val="$svc" || val="${cur}:${svc}"
-adb -s <phone> shell settings put secure enabled_accessibility_services "$val"
-adb -s <phone> shell settings get secure enabled_accessibility_services
+adb -s <phone> shell pm grant com.tgwizard.aide android.permission.WRITE_SECURE_SETTINGS
+adb -s <phone> shell appops set com.tgwizard.aide GET_USAGE_STATS allow
 ```
+
+Both survive app updates, but not an uninstall. Without the first, enable the service by hand
+under Settings → Accessibility → Aide (it then stays on, and BankID will complain).
+
+Aide only ever adds/removes its own entry in `enabled_accessibility_services`; other services
+(e.g. 1Password) are left untouched. If you edit that setting via adb yourself, mind that a
+malformed value makes Android clear the whole list, and that in zsh `"$cur:c…"` is parsed as a
+history modifier; write `"${cur}:…"`.
 
 ## Watch tile
 

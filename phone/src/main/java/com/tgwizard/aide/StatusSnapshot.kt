@@ -13,7 +13,7 @@ object StatusSnapshot {
         val keyguard = context.getSystemService(KeyguardManager::class.java)
         val power = context.getSystemService(PowerManager::class.java)
         val battery = context.getSystemService(BatteryManager::class.java)
-        val foreground = AideAccessibilityService.foreground
+        val foreground = ForegroundApps.current(context)
 
         return JSONObject()
             .put("locked", keyguard.isKeyguardLocked)

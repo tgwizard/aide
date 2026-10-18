@@ -18,34 +18,27 @@ class WatchListenerService : WearableListenerService() {
         Log.d(TAG, "Request $path from $nodeId")
         WatchActivity.record(this, path)
         return when (path) {
-            Protocol.PATH_LOCK -> {
-                val result = AideAccessibilityService.lockScreen()
-                Log.i(TAG, "Lock result: $result")
-                Tasks.forResult(result.toByteArray())
+            Protocol.PATH_LOCK -> async {
+                AideAccessibilityService.lockScreen(this).also { Log.i(TAG, "Lock result: $it") }.toByteArray()
             }
             Protocol.PATH_STATUS -> Tasks.forResult(StatusSnapshot.json(this).toString().toByteArray())
-            Protocol.PATH_SCREEN -> captureScreen()
-            Protocol.PATH_DOOR_STATUS -> async { Verisure.statusJson(this) }
-            Protocol.PATH_DOOR_LOCK -> async { Verisure.lockJson(this) }
-            Protocol.PATH_DOOR_UNLOCK -> async { Verisure.unlockJson(this) }
-            Protocol.PATH_HOME -> async { Verisure.homeJson(this) }
+            // Empty reply when no screenshot could be taken.
+            Protocol.PATH_SCREEN -> async { AideAccessibilityService.screenshot(this) ?: ByteArray(0) }
+            Protocol.PATH_DOOR_STATUS -> async { Verisure.statusJson(this).toBytes() }
+            Protocol.PATH_DOOR_LOCK -> async { Verisure.lockJson(this).toBytes() }
+            Protocol.PATH_DOOR_UNLOCK -> async { Verisure.unlockJson(this).toBytes() }
+            Protocol.PATH_HOME -> async { Verisure.homeJson(this).toBytes() }
             else -> null
         }
     }
 
-    private fun async(block: suspend () -> JSONObject): Task<ByteArray> {
+    private fun async(block: suspend () -> ByteArray): Task<ByteArray> {
         val source = TaskCompletionSource<ByteArray>()
-        scope.launch { source.setResult(block().toString().toByteArray()) }
+        scope.launch { source.setResult(block()) }
         return source.task
     }
 
-    /** Replies with JPEG bytes, or an empty array when no screenshot could be taken. */
-    private fun captureScreen(): Task<ByteArray> {
-        val service = AideAccessibilityService.instance ?: return Tasks.forResult(ByteArray(0))
-        val source = TaskCompletionSource<ByteArray>()
-        service.captureScreen { source.setResult(it ?: ByteArray(0)) }
-        return source.task
-    }
+    private fun JSONObject.toBytes() = toString().toByteArray()
 
     private companion object {
         const val TAG = "AideWatchListener"
