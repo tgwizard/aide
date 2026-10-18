@@ -5,7 +5,7 @@ import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.WearableListenerService
-import com.tgwizard.aide.verisure.Door
+import com.tgwizard.aide.verisure.Verisure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,9 +25,10 @@ class WatchListenerService : WearableListenerService() {
             }
             Protocol.PATH_STATUS -> Tasks.forResult(StatusSnapshot.json(this).toString().toByteArray())
             Protocol.PATH_SCREEN -> captureScreen()
-            Protocol.PATH_DOOR_STATUS -> async { Door.statusJson(this) }
-            Protocol.PATH_DOOR_LOCK -> async { Door.lockJson(this) }
-            Protocol.PATH_DOOR_UNLOCK -> async { Door.unlockJson(this) }
+            Protocol.PATH_DOOR_STATUS -> async { Verisure.statusJson(this) }
+            Protocol.PATH_DOOR_LOCK -> async { Verisure.lockJson(this) }
+            Protocol.PATH_DOOR_UNLOCK -> async { Verisure.unlockJson(this) }
+            Protocol.PATH_HOME -> async { Verisure.homeJson(this) }
             else -> null
         }
     }

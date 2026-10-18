@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,6 +80,7 @@ private val Ember = Color(Palette.EMBER)
 private const val STATUS_INTERVAL_MS = 2_000L
 private const val SCREEN_INTERVAL_MS = 3_000L
 private const val DOOR_INTERVAL_MS = 15_000L
+private const val HOME_INTERVAL_MS = 60_000L
 private const val HOLD_TO_UNLOCK_MS = 1_500
 
 class MainActivity : ComponentActivity() {
@@ -104,6 +106,9 @@ private fun HomeScreen() {
     val door by DoorRemote.status.collectAsState()
     val doorPending by DoorRemote.pending.collectAsState()
     var doorHint by remember { mutableStateOf<String?>(null) }
+    var home by remember { mutableStateOf<HomeStatus?>(null) }
+    var showOpenings by remember { mutableStateOf(false) }
+    var showClimates by remember { mutableStateOf(false) }
 
     // Poll the phone only while the app is in the foreground.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -132,6 +137,12 @@ private fun HomeScreen() {
                 while (true) {
                     if (DoorRemote.pending.value == null) DoorRemote.refresh(context)
                     delay(DOOR_INTERVAL_MS)
+                }
+            }
+            launch {
+                while (true) {
+                    PhoneClient.home(context)?.let { home = it }
+                    delay(HOME_INTERVAL_MS)
                 }
             }
         }
@@ -188,6 +199,47 @@ private fun HomeScreen() {
                 }
             }
         }
+        home?.let { h ->
+            item {
+                Box(Modifier.padding(top = 16.dp, bottom = 4.dp)) {
+                    Caps(listOfNotNull("Home", h.error?.let(::homeError)).joinToString(" · "), Muted)
+                }
+            }
+            // Summaries only; tap a row to list every sensor.
+            item {
+                val open = h.openings.filter { it.open }
+                StatusRow(
+                    "Doors & windows",
+                    if (open.isEmpty()) h.summary else open.joinToString(", ") { it.name },
+                    if (open.isEmpty()) Bone else Ember,
+                    onClick = { showOpenings = !showOpenings },
+                )
+            }
+            if (showOpenings) {
+                h.openings.sortedByDescending { it.open }.forEach { o ->
+                    item { DetailRow(o.name, if (o.open) listOfNotNull("open", o.at?.let(::clock)).joinToString(" ") else "closed", o.open) }
+                }
+            }
+            if (h.climates.isNotEmpty()) {
+                item {
+                    val temperatures = h.climates.map { it.temperature }
+                    val min = temperatures.min()
+                    val max = temperatures.max()
+                    StatusRow(
+                        "Temperature",
+                        if (max - min < 0.5) "%.1f°".format(max) else "%.1f–%.1f°".format(min, max),
+                        onClick = { showClimates = !showClimates },
+                    )
+                }
+                if (showClimates) {
+                    h.climates.forEach { c ->
+                        item {
+                            DetailRow(c.name, listOfNotNull("%.1f°".format(c.temperature), c.humidity?.let { "%.0f%%".format(it) }).joinToString(" "))
+                        }
+                    }
+                }
+            }
+        }
         item {
             Box(Modifier.padding(top = 16.dp, bottom = 4.dp)) {
                 Caps(if (reachable) "Phone" else "Phone not reachable", Muted)
@@ -204,12 +256,6 @@ private fun HomeScreen() {
                 )
             }
             item { StatusRow("Battery", if (s.charging) "${s.battery}% · charging" else "${s.battery}%") }
-            item {
-                StatusRow(
-                    "Sound",
-                    listOfNotNull(s.ringer.replaceFirstChar(Char::uppercase), "DND".takeIf { s.dnd }).joinToString(" · "),
-                )
-            }
         }
         screen?.takeIf { status?.screenOn == true }?.let { bitmap ->
             item {
@@ -307,17 +353,43 @@ private fun Ring(
 }
 
 @Composable
-private fun StatusRow(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 2.dp)) {
+private fun StatusRow(label: String, value: String, valueColor: Color = Bone, onClick: (() -> Unit)? = null) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 2.dp),
+    ) {
         Caps(label, Muted, fontSize = 10.sp)
-        Text(value, color = Bone, fontSize = 15.sp, maxLines = 1)
+        Text(value, color = valueColor, fontSize = 15.sp, maxLines = 2, textAlign = TextAlign.Center)
     }
+}
+
+/** One line of an expanded summary, e.g. "Kitchen window  closed". */
+@Composable
+private fun DetailRow(name: String, value: String, highlight: Boolean = false) {
+    Text(
+        "$name  $value",
+        color = if (highlight) Ember else Muted,
+        fontSize = 12.sp,
+        maxLines = 1,
+        textAlign = TextAlign.Center,
+    )
 }
 
 @Composable
 private fun Caps(text: String, color: Color, fontSize: TextUnit = 12.sp) {
     Text(text.uppercase(), color = color, fontSize = fontSize, letterSpacing = 0.15.em, maxLines = 1)
 }
+
+private fun homeError(code: String): String = when (code) {
+    "not_configured" -> "set up on phone"
+    "login_needed" -> "login needed"
+    "rate_limited" -> "rate limited"
+    else -> "last known"
+}
+
+private fun clock(at: Long): String = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(at))
 
 private fun ago(since: Long): String {
     val minutes = (System.currentTimeMillis() - since) / 60_000

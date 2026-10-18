@@ -35,7 +35,8 @@ data class DoorStatus(
         get() = when {
             error == "rate_limited" -> "Rate limited"
             error != null && lock != null -> "Last known"
-            else -> listOfNotNull(changedBy, changedAt?.let { TIME.format(Date(it)) }).joinToString(" · ").ifEmpty { null }
+            // First name only; it has to fit under an 80dp ring.
+            else -> listOfNotNull(changedBy?.substringBefore(' '), changedAt?.let { TIME.format(Date(it)) }).joinToString(" · ").ifEmpty { null }
         }
 
     companion object {

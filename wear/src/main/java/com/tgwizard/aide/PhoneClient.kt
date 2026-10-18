@@ -48,6 +48,10 @@ object PhoneClient {
         return request(context, path, timeout)?.let { DoorStatus.parse(String(it)) }
     }
 
+    /** Verisure door/window sensors and climate; null when the phone can't be reached. */
+    suspend fun home(context: Context): HomeStatus? =
+        request(context, Protocol.PATH_HOME, timeoutMs = 15_000)?.let { HomeStatus.parse(String(it)) }
+
     /** Sends an RPC to the phone app; returns its reply, or null if it's unreachable. */
     private suspend fun request(context: Context, path: String, timeoutMs: Long = 10_000): ByteArray? = try {
         withTimeout(timeoutMs) {

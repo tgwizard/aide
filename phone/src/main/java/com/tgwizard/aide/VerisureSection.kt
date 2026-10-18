@@ -26,7 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.tgwizard.aide.verisure.Door
+import com.tgwizard.aide.verisure.Verisure
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.Date
@@ -36,9 +36,9 @@ import java.util.Date
 internal fun VerisureSection() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var account by remember { mutableStateOf(Door.account(context)) }
+    var account by remember { mutableStateOf(Verisure.account(context)) }
     var awaitingCode by remember { mutableStateOf(false) }
-    var locks by remember { mutableStateOf<List<Door.Lock>>(emptyList()) }
+    var locks by remember { mutableStateOf<List<Verisure.Lock>>(emptyList()) }
     var status by remember { mutableStateOf<JSONObject?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -52,13 +52,13 @@ internal fun VerisureSection() {
             } catch (e: Exception) {
                 error = e.message ?: e.javaClass.simpleName
             } finally {
-                account = Door.account(context)
+                account = Verisure.account(context)
                 busy = false
             }
         }
     }
 
-    fun findLocks() = run { locks = Door.discoverLocks(context) }
+    fun findLocks() = run { locks = Verisure.discoverLocks(context) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 12.dp)) {
         SectionHeader("Door · Verisure")
@@ -66,15 +66,15 @@ internal fun VerisureSection() {
         when {
             awaitingCode -> CodeStep(busy) { code ->
                 run {
-                    Door.verifyMfa(context, code)
+                    Verisure.verifyMfa(context, code)
                     awaitingCode = false
-                    locks = Door.discoverLocks(context)
+                    locks = Verisure.discoverLocks(context)
                 }
             }
             current == null -> LoginStep(busy) { email, password ->
                 run {
-                    awaitingCode = Door.login(context, email, password)
-                    if (!awaitingCode) locks = Door.discoverLocks(context)
+                    awaitingCode = Verisure.login(context, email, password)
+                    if (!awaitingCode) locks = Verisure.discoverLocks(context)
                 }
             }
             current.deviceLabel == null -> {
@@ -83,32 +83,32 @@ internal fun VerisureSection() {
                 } else {
                     Text("Which lock?")
                     locks.forEach { lock ->
-                        OutlinedButton(onClick = { Door.selectLock(context, lock); account = Door.account(context) }) {
+                        OutlinedButton(onClick = { Verisure.selectLock(context, lock); account = Verisure.account(context) }) {
                             Text(lock.name)
                         }
                     }
                 }
             }
             current.doorCode == null -> DoorCodeStep { code ->
-                Door.setDoorCode(context, code)
-                account = Door.account(context)
+                Verisure.setDoorCode(context, code)
+                account = Verisure.account(context)
             }
             else -> {
-                LaunchedEffect(Unit) { status = Door.statusJson(context) }
+                LaunchedEffect(Unit) { status = Verisure.statusJson(context) }
                 InfoRow(current.lockName ?: "Lock", status?.let(::describe) ?: "…")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = { run { status = Door.lockJson(context) } },
+                        onClick = { run { status = Verisure.lockJson(context) } },
                         enabled = !busy,
                         border = BorderStroke(1.dp, Bronze),
                     ) { Text("Lock") }
-                    OutlinedButton(onClick = { run { status = Door.unlockJson(context) } }, enabled = !busy) { Text("Unlock") }
-                    TextButton(onClick = { run { status = Door.statusJson(context, maxAgeMs = 0) } }, enabled = !busy) {
+                    OutlinedButton(onClick = { run { status = Verisure.unlockJson(context) } }, enabled = !busy) { Text("Unlock") }
+                    TextButton(onClick = { run { status = Verisure.statusJson(context, maxAgeMs = 0) } }, enabled = !busy) {
                         Text("Refresh")
                     }
                 }
                 TextButton(onClick = {
-                    Door.logout(context)
+                    Verisure.logout(context)
                     account = null
                     locks = emptyList()
                     status = null

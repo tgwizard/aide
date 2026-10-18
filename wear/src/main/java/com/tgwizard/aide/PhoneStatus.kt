@@ -8,8 +8,6 @@ data class PhoneStatus(
     val screenOn: Boolean,
     val battery: Int,
     val charging: Boolean,
-    val ringer: String,
-    val dnd: Boolean,
     val app: String?,
     val appSince: Long?,
 ) {
@@ -20,8 +18,6 @@ data class PhoneStatus(
                 screenOn = optBoolean("screenOn"),
                 battery = optInt("battery", -1),
                 charging = optBoolean("charging"),
-                ringer = optString("ringer", "ring"),
-                dnd = optBoolean("dnd"),
                 app = optString("app").ifEmpty { null },
                 appSince = if (has("appSince")) getLong("appSince") else null,
             )

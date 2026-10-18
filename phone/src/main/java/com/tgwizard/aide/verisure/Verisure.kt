@@ -5,15 +5,16 @@ import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 
 /**
- * The Verisure-connected door lock: account setup (used by the phone UI) and status/lock/unlock
- * (used by the watch). All API traffic is serialized and status is cached, so the watch can ask
- * freely without hammering Verisure.
+ * Verisure: account setup (used by the phone UI), the door lock and sensors (used by the watch).
+ * All API traffic is serialized and results are cached, so the watch can ask freely without
+ * hammering Verisure.
  */
-object Door {
+object Verisure {
 
     data class Lock(val deviceLabel: String, val name: String)
 
@@ -33,6 +34,7 @@ object Door {
     private var api: VerisureApi? = null
     private var lastRefreshAt = 0L
     private var cached: State? = null
+    private var cachedHome: Pair<Long, JSONObject>? = null
 
     /** Credentials between [login] and [verifyMfa]; never persisted until login succeeds. */
     private var pending: Pair<String, String>? = null
@@ -91,6 +93,7 @@ object Door {
         SecureStore(context).clear()
         api = null
         cached = null
+        cachedHome = null
         pending = null
     }
 
@@ -110,6 +113,18 @@ object Door {
     suspend fun lockJson(context: Context): JSONObject = report(context) { change(context, LOCKED) }
 
     suspend fun unlockJson(context: Context): JSONObject = report(context) { change(context, UNLOCKED) }
+
+    /** Door/window sensors and climate readings as JSON for the watch (see wear/.../HomeStatus.kt); never throws. */
+    suspend fun homeJson(context: Context, maxAgeMs: Long = 60_000): JSONObject = try {
+        mutex.withLock {
+            val fresh = cachedHome?.takeIf { System.currentTimeMillis() - it.first < maxAgeMs }?.second
+            JSONObject((fresh ?: fetchHome(context).also { cachedHome = System.currentTimeMillis() to it }).toString())
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "Home request failed", e)
+        // Still show the last known state, flagged with the error.
+        JSONObject(cachedHome?.second?.toString() ?: "{}").put("error", errorCode(e))
+    }
 
     private suspend fun report(context: Context, block: suspend () -> State): JSONObject {
         val account = account(context)
@@ -145,7 +160,7 @@ object Door {
             lock = lock.optString("lockStatus").ifEmpty { null },
             door = lock.optString("doorState").ifEmpty { null },
             changedBy = lock.optJSONObject("user")?.optString("name")?.ifEmpty { null },
-            changedAt = lock.optString("eventTime").ifEmpty { null }?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() },
+            changedAt = parseTime(lock.optString("eventTime")),
             method = lock.optString("lockMethod").ifEmpty { null },
             fetchedAt = System.currentTimeMillis(),
         ).also { cached = it }
@@ -176,10 +191,41 @@ object Door {
         return if (confirmed && state.lock != target) state.copy(lock = target).also { cached = it } else state
     }
 
+    private suspend fun fetchHome(context: Context): JSONObject = withSession(context) { api, account ->
+        val variables = JSONObject().put("giid", account.giid ?: throw NotConfiguredException())
+        val openings = api.graphql("DoorWindow", Queries.DOOR_WINDOW, variables)
+            .getJSONObject("installation").getJSONArray("doorWindows").objects()
+            .map { sensor ->
+                JSONObject()
+                    .put("name", sensor.optString("area").ifEmpty { sensor.getJSONObject("device").optString("deviceLabel") })
+                    .put("type", sensor.optString("type"))
+                    .put("open", sensor.optString("state") == "OPEN")
+                    .put("at", parseTime(sensor.optString("reportTime")))
+            }
+        val climates = api.graphql("Climate", Queries.CLIMATE, variables)
+            .getJSONObject("installation").getJSONArray("climates").objects()
+            .filter { it.has("temperatureValue") && !it.isNull("temperatureValue") }
+            .map { sensor ->
+                JSONObject()
+                    .put("name", sensor.getJSONObject("device").optString("area"))
+                    .put("temp", sensor.getDouble("temperatureValue"))
+                    .apply {
+                        if (sensor.optBoolean("humidityEnabled") && !sensor.isNull("humidityValue")) {
+                            put("humidity", sensor.getDouble("humidityValue"))
+                        }
+                    }
+            }
+        JSONObject().put("openings", JSONArray(openings)).put("climates", JSONArray(climates))
+    }
+
     private suspend fun smartLocks(api: VerisureApi, giid: String) =
         api.graphql("SmartLock", Queries.SMART_LOCK, JSONObject().put("giid", giid))
-            .getJSONObject("installation").getJSONArray("smartLocks")
-            .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
+            .getJSONObject("installation").getJSONArray("smartLocks").objects()
+
+    private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
+
+    private fun parseTime(iso: String): Long? =
+        iso.ifEmpty { null }?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
 
     private fun lockName(lock: JSONObject) =
         lock.getJSONObject("device").optString("area").ifEmpty { lock.getJSONObject("device").getString("deviceLabel") }
@@ -228,5 +274,7 @@ private object Queries {
     const val SMART_LOCK = "query SmartLock(\$giid: String!) {\n  installation(giid: \$giid) {\n    smartLocks {\n      lockStatus\n      doorState\n      lockMethod\n      eventTime\n      doorLockType\n      secureMode\n      device {\n        deviceLabel\n        area\n        __typename\n      }\n      user {\n        name\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"
     const val LOCK = "mutation DoorLock(\$giid: String!, \$deviceLabel: String!, \$input: LockDoorInput!) {\n  DoorLock(giid: \$giid, deviceLabel: \$deviceLabel, input: \$input)\n}\n"
     const val UNLOCK = "mutation DoorUnlock(\$giid: String!, \$deviceLabel: String!, \$input: LockDoorInput!) {\n  DoorUnlock(giid: \$giid, deviceLabel: \$deviceLabel, input: \$input)\n}\n"
+    const val DOOR_WINDOW = "query DoorWindow(\$giid: String!) {\n  installation(giid: \$giid) {\n    doorWindows {\n      device {\n        deviceLabel\n        __typename\n      }\n      type\n      area\n      state\n      wired\n      reportTime\n      __typename\n    }\n    __typename\n  }\n}\n"
+    const val CLIMATE = "query Climate(\$giid: String!) {\n  installation(giid: \$giid) {\n    climates {\n      device {\n        deviceLabel\n        area\n        gui {\n          label\n          __typename\n        }\n        __typename\n      }\n      humidityEnabled\n      humidityTimestamp\n      humidityValue\n      temperatureTimestamp\n      temperatureValue\n      thresholds {\n        aboveMaxAlert\n        belowMinAlert\n        sensorType\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n"
     const val POLL_LOCK_STATE = "query pollLockState(\$giid: String!, \$transactionId: String, \$deviceLabel: String!, \$futureState: DoorLockState!) {\n  installation(giid: \$giid) {\n    doorLockStateChangePollResult(transactionId: \$transactionId, deviceLabel: \$deviceLabel, futureState: \$futureState) {\n      result\n      createTime\n      __typename\n    }\n    __typename\n  }\n}\n"
 }
