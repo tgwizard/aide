@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Aide</string>
-    <string name="accessibility_description">Lets your Aide watch app lock this phone.</string>
+    <string name="accessibility_description">Lets the Aide watch app lock this phone.</string>
 </resources>

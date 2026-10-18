@@ -13,10 +13,10 @@ import kotlinx.coroutines.withTimeout
 object PhoneClient {
 
     enum class LockResult(val message: String) {
-        LOCKED("Phone locked"),
-        NO_ACCESSIBILITY("Enable Aide in phone's accessibility settings"),
-        UNREACHABLE("Phone not reachable"),
-        FAILED("Lock failed"),
+        LOCKED("Locked"),
+        NO_ACCESSIBILITY("Phone setup needed"),
+        UNREACHABLE("Not reachable"),
+        FAILED("Failed"),
     }
 
     suspend fun lockPhone(context: Context): LockResult = try {

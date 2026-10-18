@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A bold "A", inside the 66dp adaptive-icon safe zone. -->
+<!-- Ansuz rune inside a thin ring, within the 66dp adaptive-icon safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#FFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M48,32 L60,32 L77,76 L67,76 L63.4,66 L44.6,66 L41,76 L31,76 Z M47.4,58 L60.6,58 L54,40 Z" />
+        android:pathData="M54,24 A30,30 0 1,1 53.99,24 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#B08D57" />
+    <path
+        android:pathData="M47,36 L47,74 M47,36 L62,46 M47,49 L62,59"
+        android:strokeLineCap="square"
+        android:strokeLineJoin="miter"
+        android:strokeWidth="4.5"
+        android:strokeColor="#B08D57" />
 </vector>
