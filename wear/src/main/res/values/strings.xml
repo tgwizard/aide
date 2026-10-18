@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Aide</string>
     <string name="tile_lock_label">Lock phone</string>
+    <string name="tile_door_label">Door</string>
 </resources>

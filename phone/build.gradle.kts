@@ -41,4 +41,5 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.okhttp)
 }

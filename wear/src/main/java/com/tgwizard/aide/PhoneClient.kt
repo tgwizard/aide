@@ -42,9 +42,15 @@ object PhoneClient {
         return withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size) }
     }
 
+    /** Door lock status, or the result of a lock/unlock (which can take ~15 s to confirm). */
+    suspend fun door(context: Context, path: String): DoorStatus? {
+        val timeout = if (path == Protocol.PATH_DOOR_STATUS) 15_000L else 40_000L
+        return request(context, path, timeout)?.let { DoorStatus.parse(String(it)) }
+    }
+
     /** Sends an RPC to the phone app; returns its reply, or null if it's unreachable. */
-    private suspend fun request(context: Context, path: String): ByteArray? = try {
-        withTimeout(10_000) {
+    private suspend fun request(context: Context, path: String, timeoutMs: Long = 10_000): ByteArray? = try {
+        withTimeout(timeoutMs) {
             val nodes = Wearable.getCapabilityClient(context)
                 .getCapability(Protocol.PHONE_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
                 .await()

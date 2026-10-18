@@ -7,4 +7,5 @@ object Palette {
     const val BRONZE = 0xFFB08D57.toInt()
     const val BONE = 0xFFE6E1D6.toInt()
     const val MUTED = 0xFF8C8A85.toInt()
+    const val EMBER = 0xFFD9826A.toInt()
 }
