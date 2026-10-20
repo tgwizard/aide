@@ -76,7 +76,7 @@ object Verisure {
             if (installations.length() == 0) throw VerisureApi.VerisureException("No installations on this account")
             val installation = installations.getJSONObject(0)
             val giid = installation.getString("giid")
-            val withGiid = account.copy(giid = giid, installationName = installation.optString("alias").ifEmpty { null })
+            val withGiid = account.copy(giid = giid, installationName = installation.text("alias"))
             SecureStore(context).save(withGiid)
 
             val locks = smartLocks(api, giid).map { Lock(it.getJSONObject("device").getString("deviceLabel"), lockName(it)) }
@@ -157,11 +157,12 @@ object Verisure {
         val lock = smartLocks(api, giid).firstOrNull { it.getJSONObject("device").getString("deviceLabel") == label }
             ?: throw VerisureApi.VerisureException("Lock $label not found")
         State(
-            lock = lock.optString("lockStatus").ifEmpty { null },
-            door = lock.optString("doorState").ifEmpty { null },
-            changedBy = lock.optJSONObject("user")?.optString("name")?.ifEmpty { null },
-            changedAt = parseTime(lock.optString("eventTime")),
-            method = lock.optString("lockMethod").ifEmpty { null },
+            lock = lock.text("lockStatus"),
+            door = lock.text("doorState"),
+            // Null for manual operation (thumb turn, key), when there's no user.
+            changedBy = lock.optJSONObject("user")?.text("name"),
+            changedAt = parseTime(lock.text("eventTime")),
+            method = lock.text("lockMethod"),
             fetchedAt = System.currentTimeMillis(),
         ).also { cached = it }
     }
@@ -173,7 +174,7 @@ object Verisure {
             val code = account.doorCode ?: throw NotConfiguredException()
             val operation = if (target == LOCKED) "DoorLock" else "DoorUnlock"
             val variables = JSONObject().put("giid", giid).put("deviceLabel", label).put("input", JSONObject().put("code", code))
-            val transactionId = api.graphql(operation, if (target == LOCKED) Queries.LOCK else Queries.UNLOCK, variables).optString(operation)
+            val transactionId = api.graphql(operation, if (target == LOCKED) Queries.LOCK else Queries.UNLOCK, variables).text(operation)
             Log.i(TAG, "$operation sent, transaction $transactionId")
 
             // Same polling as Home Assistant: up to ~15 s until the lock confirms.
@@ -183,7 +184,7 @@ object Verisure {
                 if (attempt > 1) delay(500)
                 api.graphql("pollLockState", Queries.POLL_LOCK_STATE, pollVariables)
                     .getJSONObject("installation").optJSONObject("doorLockStateChangePollResult")
-                    ?.optString("result") == "OK"
+                    ?.text("result") == "OK"
             }
         }
         val state = fetch(context)
@@ -197,17 +198,17 @@ object Verisure {
             .getJSONObject("installation").getJSONArray("doorWindows").objects()
             .map { sensor ->
                 JSONObject()
-                    .put("name", sensor.optString("area").ifEmpty { sensor.getJSONObject("device").optString("deviceLabel") })
-                    .put("type", sensor.optString("type"))
-                    .put("open", sensor.optString("state") == "OPEN")
-                    .put("at", parseTime(sensor.optString("reportTime")))
+                    .put("name", sensor.text("area") ?: sensor.getJSONObject("device").text("deviceLabel"))
+                    .put("type", sensor.text("type"))
+                    .put("open", sensor.text("state") == "OPEN")
+                    .put("at", parseTime(sensor.text("reportTime")))
             }
         val climates = api.graphql("Climate", Queries.CLIMATE, variables)
             .getJSONObject("installation").getJSONArray("climates").objects()
             .filter { it.has("temperatureValue") && !it.isNull("temperatureValue") }
             .map { sensor ->
                 JSONObject()
-                    .put("name", sensor.getJSONObject("device").optString("area"))
+                    .put("name", sensor.getJSONObject("device").text("area"))
                     .put("temp", sensor.getDouble("temperatureValue"))
                     .apply {
                         if (sensor.optBoolean("humidityEnabled") && !sensor.isNull("humidityValue")) {
@@ -224,11 +225,13 @@ object Verisure {
 
     private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
 
-    private fun parseTime(iso: String): Long? =
-        iso.ifEmpty { null }?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+    private fun parseTime(iso: String?): Long? = iso?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+
+    /** Like optString, but null for missing/empty/JSON null; Android's optString returns "null" for those. */
+    private fun JSONObject.text(name: String): String? = if (isNull(name)) null else optString(name).ifEmpty { null }
 
     private fun lockName(lock: JSONObject) =
-        lock.getJSONObject("device").optString("area").ifEmpty { lock.getJSONObject("device").getString("deviceLabel") }
+        lock.getJSONObject("device").let { it.text("area") ?: it.getString("deviceLabel") }
 
     /**
      * Runs [block] with a live session: refreshes cookies every 10 min, and on an auth error
